@@ -1,0 +1,167 @@
+{% extends 'base.html' %} {% block content %}
+
+<div class="container mx-auto mt-4 space-y-4">
+  <h1 class="text-xl font-bold mb-4">Administrator Dashboard</h1>
+
+  {% for ts in timesheets %}
+
+  <div class="collapse collapse-arrow bg-base-100 border border-base-300">
+    <input type="radio" name="my-accordion-4" {% if ts.date == date %}checked{% endif %} />
+
+    <div class="collapse-title font-semibold">
+      <div class="flex flex-col gap-2">
+        <h2 class="font-semibold">{{ ts.date }}</h2>
+        <p class="text-xs font-normal">
+          {% if not ts.is_approved %}Not {% endif %}Approved
+        </p>
+      </div>
+    </div>
+
+    <div class="collapse-content text-sm">
+        {% if ts.employee.manager.id == user.id and not ts.is_approved %}
+        <form action="{% url 'cal:approve_timesheet' ts.id %}" method="POST" class="mb-4">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                Approve
+            </button>
+        </form>
+        {% endif %}
+        
+      <form class="space-y-4 ts">
+        <input type="hidden" name="date" value="{{ ts.date.isoformat }}" />
+        <table class="table-auto w-full">
+          <tbody>
+            <tr>
+              <td class="px-4 py-2 font-semibold">Hours Worked</td>
+              <td class="px-4 py-2">
+                <input
+                  type="number"
+                  name="hours_worked"
+                  class="input input-bordered w-full"
+                  required
+                  {% if ts.date != date %}disabled
+                  {% endif %}
+                    value="{{ ts.hours }}"
+                />
+              </td>
+            </tr>
+            <tr>
+              <td class="px-4 py-2 font-semibold">Description</td>
+              <td class="px-4 py-2">
+                <textarea
+                  name="description"
+                  class="textarea textarea-bordered w-full"
+                  required
+                    {% if ts.date != date %}disabled
+                    {% endif %}
+                        >{% if ts.description %}{{ ts.description }}{% endif %}</textarea
+                >
+              </td>
+            </tr>
+            <tr>
+              <td class="px-4 py-2 font-semibold">Attachment</td>
+              <td class="px-4 py-2">
+                <ul class="attachments-list list-inside list-disc mb-2">
+                    {% for attachment in ts.attachments %}
+                    <li>
+                      <a href="/{{ attachment }}" target="_blank">
+                        {{ attachment }}
+                      </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+                <input
+                  type="file"
+                  name="attachment"
+                  class="file-input file-input-bordered w-full"
+                  
+                    {% if ts.date != date %}disabled{% endif %}
+                  />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="mt-4">
+          <button type="submit" class="btn btn-primary" {% if ts.date != date %}disabled{% endif %}>Submit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% endfor %}
+</div>
+
+<script>
+document.querySelectorAll('form.ts').forEach((form) => {
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const formData = new FormData(form);
+
+    const attachments = []
+    form.querySelector(".attachments-list").querySelectorAll("li a").forEach((a) => {
+        attachments.push(a.href);
+    });
+
+    const data = {
+        date: formData.get('date'),
+        description: formData.get('description'),
+        hours: formData.get('hours_worked'),
+        attachments: attachments,
+    }
+
+    try {
+        const r = await fetch("/submit_timesheet/", {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+        })
+
+        if (!r.ok) {
+            throw new Error('Network response was not ok');
+        }
+    } catch (error) {
+        alert('Error submitting timesheet: ' + error);
+        return;
+    }
+
+    // Show success message
+    alert('Timesheet submitted successfully!');
+    window.location.reload();
+  });
+});
+
+document.querySelectorAll('input[type="file"]').forEach((input) => {
+  input.addEventListener('change', async(event) => {
+    const fileList = event.target.files;
+    const formData = new FormData();
+    formData.append('file', fileList[0]);
+    try {
+        await fetch('/upload_file/', {
+            method: 'POST',
+            body: formData,
+        })
+    } catch (error) {
+        alert('Error uploading file: ' + error);
+        return;
+    }
+
+    const attachmentsList = event.target.closest('form').querySelector('.attachments-list');
+    
+    for (let i = 0; i < fileList.length; i++) {
+        const li = document.createElement('li');
+        const link = document.createElement('a');
+        link.href = `upload/${fileList[i].name}`;
+        link.textContent = `upload/${fileList[i].name}`;
+        li.appendChild(link);
+        attachmentsList.appendChild(li);
+    }
+
+    event.target.value = '';
+  });
+});
+</script>
+
+{% endblock %}
